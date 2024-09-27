@@ -1,0 +1,75 @@
+#Load libraries------
+library(Seurat)
+library(SingleR)
+library(celldex)
+
+#IMMUNE cells----------
+clusters_to_include <- c("3", "4","10")
+Harmony_seurat_immune_singlets <- subset(harmonized_seurat_3_doblets_out, subset = seurat_clusters %in% clusters_to_include)
+Harmony_seurat_immune_singlets <- NormalizeData(object = Harmony_seurat_immune_singlets)
+Harmony_seurat_immune_singlets <- ScaleData(object = Harmony_seurat_immune_singlets)
+Harmony_seurat_immune_singlets <- RunPCA(object = Harmony_seurat_immune_singlets)
+ElbowPlot(Harmony_seurat_immune_singlets)
+Harmony_seurat_immune_singlets <- FindNeighbors(object = Harmony_seurat_immune_singlets, dims = 1:30)
+Harmony_seurat_immune_singlets <- FindClusters(object = Harmony_seurat_immune_singlets, resolution = 0.1)
+Harmony_seurat_immune_singlets <- RunUMAP(object = Harmony_seurat_immune_singlets, dims = 1:30)
+
+#Automatic annotation immune cells with monaco dataset------------
+monaco <- celldex::MonacoImmuneData()
+monaco$label.main
+
+## Transform Seurat object to SingleCellExperiment object
+Idents(Harmony_seurat_immune_singlets) <- Harmony_seurat_immune_singlets$seurat_clusters
+sce.Harmony_seurat_immune_singlets <- as.SingleCellExperiment(Harmony_seurat_immune_singlets)
+
+## Annotate CELLS (main label)
+pred.monaco <- SingleR(test=sce.Harmony_seurat_immune_singlets, ref=monaco, assay.type.test=1, labels=monaco$label.main)
+monaco.main <- cbind(monaco.main=pred.monaco$labels)
+rownames(monaco.main) <- rownames(monaco.main) <- colnames(sce.Harmony_seurat_immune_singlets)
+Harmony_seurat_immune_singlets <- AddMetaData(Harmony_seurat_immune_singlets, as.data.frame(cbind(monaco.main)))
+Harmony_seurat_immune_singlets <- SetIdent(Harmony_seurat_immune_singlets, value = "monaco.main")
+DimPlot(Harmony_seurat_immune_singlets, label = T , repel = T, label.size = 3)
+Harmony_seurat_immune_singlets@meta.data <- Harmony_seurat_immune_singlets@meta.data %>%
+  mutate(monaco.main = ifelse(monaco.main == "Basophils", "Mast cells", monaco.main))
+Idents(Harmony_seurat_immune_singlets) <- Harmony_seurat_immune_singlets@meta.data$monaco.main
+
+DimPlot(Harmony_seurat_immune_singlets, label = T , repel = T, label.size = 3)
+DimPlot(Harmony_seurat_immune_singlets, label = T , repel = T, label.size = 3, split.by = "Histological_type")
+
+# Ggplot
+sample_colors_3 <- c("IDC"="darkolivegreen", "ILC" = "darkorchid1")
+ggplot(Harmony_seurat_immune_singlets@meta.data, aes(x = monaco.main, fill = Histological_type)) +
+  geom_bar() +
+  labs(title = "nCells per cluster",
+       x = "Cell type",
+       y = "nCells") +
+  scale_fill_manual(values = sample_colors_3) +  # Asignar colores según la muestra
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotar etiquetas del eje x
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))
+
+## Props
+populations <- FetchData(Harmony_seurat_immune_singlets, vars = c("Sample_type", "monaco.main"))
+population_props <- as.data.frame(prop.table(table(populations$Histological_type, populations$monaco.main), margin = 1))
+colnames(population_props) <- c("SampleType", "CellType", "Proportion")
+bar_plot <- ggplot(population_props, aes(x = SampleType, y = Proportion, fill = factor(CellType))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Mixture Plot",
+       x = "Histological Type",
+       y = "Proportion",
+       fill = "Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Inclina las etiquetas de las muestras 
+  scale_fill_discrete(name = "CellType") 
+print(bar_plot)
+
+#FeaturePlots
+clusters_to_include <- c("ILC")
+Harmony_seurat_immune_singlets_ILC <- subset(Harmony_seurat_immune_singlets, subset = Histological_type %in% clusters_to_include)
+FeaturePlot(Harmony_seurat_immune_singlets_ILC, c("CD3E", "CD4", "CD8A", "MS4A1", "CD68","KIT"))
+clusters_to_include <- c("IDC")
+Harmony_seurat_immune_singlets_IDC <- subset(Harmony_seurat_immune_singlets, subset = Histological_type %in% clusters_to_include)
+FeaturePlot(Harmony_seurat_immune_singlets_IDC, c("CD3E", "CD4", "CD8A", "MS4A1", "CD68","KIT"))
+
+FeaturePlot(Harmony_seurat_immune_singlets, c("CD25", "CD69"), split.by = "Histological_type")
+
+
