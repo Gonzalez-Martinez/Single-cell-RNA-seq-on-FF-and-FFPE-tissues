@@ -1,0 +1,73 @@
+Load libraries----.
+library(Seurat)
+
+#EPITHELIAL cells analysis----------
+clusters_to_include <- c("0", "2","5", "6", "11")
+Harmony_epi_singlet <- subset(harmonized_seurat_3_doblets_out, subset = seurat_clusters %in% clusters_to_include)
+Harmony_epi_singlet <- RunHarmony(Harmony_epi_singlet, 
+                                 group.by.vars = c("Sample_type"), 
+                                 reduction = "pca", assay.use = "SCT", reduction.save = "harmony")
+Harmony_epi_singlet <- RunUMAP(Harmony_epi_singlet, reduction = "harmony", assay = "SCT", dims = 1:30)
+Harmony_epi_singlet <- FindNeighbors(object = Harmony_epi_singlet, reduction = "harmony")
+Harmony_epi_singlet <- FindClusters(Harmony_epi_singlet, resolution = c(0.15))
+Harmony_epi_singlet <- SetIdent(Harmony_epi_singlet, value = "Cell_type")
+
+DimPlot(Harmony_epi_singlet, label = TRUE, label.size = 3, label.color = "black")
+DimPlot(Harmony_epi_singlet, label = FALSE, label.size = 3, label.color = "black", group.by = "Sample_ID")
+DimPlot(Harmony_epi_singlet, label = FALSE, label.size = 3, label.color = "black", group.by = "Sample_type")
+DimPlot(Harmony_epi_singlet, label = TRUE, label.size = 3, label.color = "black", group.by = "Histological_type")
+DimPlot(Harmony_epi_singlet, label = FALSE, label.size = 3, label.color = "black", split.by = "Sample_ID")
+DimPlot(Harmony_epi_singlet, label = FALSE, label.size = 3, label.color = "black", split.by = "Sample_type")
+DimPlot(Harmony_epi_singlet, label = TRUE, label.size = 3, label.color = "black", split.by = "Histological_type")
+DimPlot(Harmony_epi_singlet, label = F, label.size = 3, label.color = "black", split.by = "Histological_type")
+
+HEATMAP epithelial cells------------
+Markers_epi_harmony_singlets_Cell_type <- FindAllMarkers(Harmony_epi_singlet, only.pos = TRUE)
+Markers_epi_harmony_singlets_Cell_type %>%
+  group_by(cluster) %>%
+  filter(avg_log2FC > 1) %>%
+  slice_head(n = 10) %>%
+  ungroup() -> top10
+
+Harmony_epi_singlet <- ScaleData(object = Harmony_epi_singlet, features = rownames(Harmony_epi_singlet))
+DoHeatmap(Harmony_epi_singlet, features = top10$gene, size = 3, angle = 45, slot = "scale.data")
+
+#HEATMAP ILC vs IDC------------
+Harmony_epi_singlet <- SetIdent(Harmony_epi_singlet, value = "Histological_type")
+Markers_epi_harmony_singlets_by_histological_type <- FindAllMarkers(Harmony_epi_singlet, only.pos = TRUE)
+Markers_epi_harmony_singlets_by_histological_type %>%
+  group_by(cluster) %>%
+  filter(avg_log2FC > 1) %>%
+  slice_head(n = 40) %>%
+  ungroup() -> top40
+DoHeatmap(Harmony_epi_singlet, features = top40$gene, size = 3, angle = 45, slot = "scale.data")
+
+#DotPlot epi------
+DotPlot(Harmony_epi_singlet, features = c("ERBB2", "MKI67", "PGR", "ESR1", "CDH1"), group.by = "Sample_ID") + 
+  RotatedAxis() +
+  coord_flip()
+
+#ILC epithelial cells subanalysis-------
+ILC_1 <- NormalizeData(object = ILC_1)
+ILC_1 <- FindVariableFeatures(object = ILC_1)
+ILC_1 <- ScaleData(object = ILC_1)
+ILC_1 <- RunPCA(object = ILC_1)
+ElbowPlot(ILC_1)
+ILC_1 <- FindNeighbors(object = ILC_1, dims = 1:15)
+ILC_1 <- FindClusters(object = ILC_1, resolution =0.3)
+ILC_1 <- RunUMAP(object = ILC_1, dims = 1:15)
+
+#Annotation
+new.cluster.ids <- c("Fibroblasts", "T cells", "Epithelial cells 1", "Myeloid cells", "Epithelial cells 2", "Basal cells", "Normal epithelial cells", "Endothelial cells", "B cells", "Pericytes", "Cycling epithelial cells", "Plasma cells", "Mast cells")
+names(new.cluster.ids) <- levels(ILC_1)
+ILC_1 <- RenameIdents(ILC_1, new.cluster.ids)
+ILC_1@meta.data$Cell_type <- ILC_1@active.ident
+ILC_1 <- SetIdent(ILC_1, value="Cell_type")
+markers_ILC_1 <- FindAllMarkers(ILC_1, only.pos = TRUE)
+markers_ILC_1 %>%
+  group_by(cluster) %>%
+  filter(avg_log2FC > 1) %>%
+  slice_head(n = 5) %>%
+  ungroup() -> top5
+ILC_1 <- ScaleData(object = ILC_1, features = rownames(ILC_1))
+DoHeatmap(ILC_1, features = top5$gene, size = 3, angle = 45, slot = "scale.data")
