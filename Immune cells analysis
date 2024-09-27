@@ -62,6 +62,10 @@ bar_plot <- ggplot(population_props, aes(x = SampleType, y = Proportion, fill = 
   scale_fill_discrete(name = "CellType") 
 print(bar_plot)
 
+#N cells
+cell_counts <- table(Harmony_seurat_immune_singlets$Sample_ID, Harmony_seurat_immune_singlets$monaco.main)
+print(cell_counts)
+
 #FeaturePlots
 clusters_to_include <- c("ILC")
 Harmony_seurat_immune_singlets_ILC <- subset(Harmony_seurat_immune_singlets, subset = Histological_type %in% clusters_to_include)
