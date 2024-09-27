@@ -21,6 +21,7 @@ infercnv_obj = infercnv::run(infercnv_obj
                              ,HMM=TRUE)
 
 #InferCNVs IDC epithelial cells------
+
 clusters_to_include <- c("Epithelial cells 1", "Epithelial cells 3", "Epithelial cells 4", "Ciliated cells", "Basal cells", "Lymphocytes")
 Object_to_CNVs <- subset(harmonized_seurat_3_doblets_out, subset = Cell_type %in% clusters_to_include)
 DefaultAssay(Object_to_CNVs) = 'RNA'
