@@ -1,5 +1,9 @@
 Load libraries----.
 library(Seurat)
+library(ggplot2)
+library(dplyr)
+library(clusterProfiler)
+library(org.Hs.eg.db)
 
 #EPITHELIAL cells analysis----------
 clusters_to_include <- c("0", "2","5", "6", "11")
@@ -46,6 +50,57 @@ DoHeatmap(Harmony_epi_singlet, features = top40$gene, size = 3, angle = 45, slot
 DotPlot(Harmony_epi_singlet, features = c("ERBB2", "MKI67", "PGR", "ESR1", "CDH1"), group.by = "Sample_ID") + 
   RotatedAxis() +
   coord_flip()
+
+#ggplot n cells
+sample_colors_3 <- c("IDC"="darkolivegreen", "ILC" = "darkorchid1")
+sample_colors_3 <- c("IDC"="darkolivegreen", "ILC" = "darkorchid1")
+ggplot(Harmony_epi_singlet@meta.data, aes(x = Cell_type, fill = Histological_type)) +
+  geom_bar() +
+  labs(title = "nCells per cluster",
+       x = "Cell type",
+       y = "nCells") +
+  scale_fill_manual(values = sample_colors_3) +  # Asignar colores según la muestra
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Rotar etiquetas del eje x
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE))
+
+##Props epithelial cells per histological type-------
+populations <- FetchData(Harmony_epi_singlet, vars = c("Histological_type", "Cell_type"))
+population_props <- as.data.frame(prop.table(table(populations$Histological_type, populations$Cell_type), margin = 1))
+colnames(population_props) <- c("HistologicalType", "CellType", "Proportion")
+epithelial_cell_types <- c("Epithelial cells 1", "Epithelial cells 2", "Epithelial cells 3", "Epithelial cells 4", "Ciliated cells")
+population_props <- population_props %>% filter(CellType %in% epithelial_cell_types)
+population_props$CellType <- droplevels(population_props$CellType)
+levels(population_props$CellType)
+
+##Barplot anotado_si tengo el new.cluster.ids puedo hacer el barplot anotado----------
+bar_plot <- ggplot(population_props, aes(x = HistologicalType, y = Proportion, fill = factor(CellType))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Mixture Plot",
+       x = "Histological type",
+       y = "Proportion",
+       fill = "Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Inclina las etiquetas de las muestras 
+  scale_fill_discrete(name = "CellType")
+print(bar_plot)
+
+#MCC enrichGO------
+Harmony_epi_singlet <- SetIdent(Harmony_epi_singlet, value = "Cell_type")
+Markers_epi <- FindAllMarkers(Harmony_epi_singlet, only.pos = TRUE)
+cluster_of_interest <- c("Ciliated cells")
+markers_ciliated_epi <- subset(Markers_epi, cluster == cluster_of_interest)
+filtered_markers_ciliated_epi <- head(markers_ciliated_epi, 400)
+gene_names <- unique(filtered_markers_ciliated_epi$gene)
+enrich_result <- enrichGO(gene         = gene_names,
+                          OrgDb        = org.Hs.eg.db,
+                          keyType      = "SYMBOL",
+                          ont          = "BP",
+                          pAdjustMethod = "BH",
+                          pvalueCutoff = 0.01,
+                          qvalueCutoff = 0.05,
+                          readable     = TRUE)
+heatplot(enrich_result, showCategory = 40)
+barplot(enrich_result, showCategory = 30)
 
 #ILC epithelial cells subanalysis-------
 ILC_1 <- NormalizeData(object = ILC_1)
