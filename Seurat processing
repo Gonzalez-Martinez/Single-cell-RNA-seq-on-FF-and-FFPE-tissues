@@ -42,23 +42,6 @@ harmonized_seurat_3 <- RunUMAP(harmonized_seurat_3, reduction = "harmony", assay
 harmonized_seurat_3 <- FindNeighbors(object = harmonized_seurat_3, reduction = "harmony")
 harmonized_seurat_3 <- FindClusters(harmonized_seurat_3, resolution = c(0.15))
 
-positive_markers_harmonized_3 <- FindAllMarkers(harmonized_seurat_3, only.pos = TRUE)
-
-positive_markers_harmonized_3 %>%
-  group_by(cluster) %>%
-  filter(avg_log2FC > 1) %>%
-  slice_head(n = 5) %>%
-  ungroup() -> top5
-
-harmonized_seurat_3 <- ScaleData(object = harmonized_seurat_3, features = rownames(harmonized_seurat_3))
-DoHeatmap(harmonized_seurat_3, features = top5$gene, size = 3, angle = 45, slot = "scale.data")
-
-new.cluster.ids <- c("Epithelial cells 1", "Fibroblasts", "Epithelial cells 2", "Lymphocytes", "Myeloid cells", "Epithelial cells 3", "Epithelial cells 4", "Endothelial cells", "Pericytes", "Basal cells", "Mast cells", "Ciliated cells")
-
-names(new.cluster.ids) <- levels(harmonized_seurat_3)
-harmonized_seurat_3 <- RenameIdents(harmonized_seurat_3, new.cluster.ids)
-harmonized_seurat_3@meta.data$Cell_type <- harmonized_seurat_3@active.ident
-
 #Doublets detection----------------
 ## pK Identification 
 sweep.res.list <- paramSweep(harmonized_seurat_3, PCs = 1:20, sct = FALSE)
@@ -97,7 +80,6 @@ harmonized_seurat_3_doblets <- SetIdent(harmonized_seurat_3_doblets, value = "DF
 
 ## Proportions
 new.cluster.ids <- c("Doublets", "Singlets")
-
 populations <- FetchData(harmonized_seurat_3_doblets, vars = c("Sample_type", "DF.classifications_0.25_0.28_3067"))
 population_props <- as.data.frame(prop.table(table(populations$Sample_type, populations$DF.classifications_0.25_0.28_3067), margin = 1))
 colnames(population_props) <- c("SampleType", "Doublets_Singlets", "Proportion")
@@ -115,3 +97,48 @@ print(bar_plot)
 #To eliminate doublets-----------
 clusters_to_include <- c("Singlet")
 harmonized_seurat_3_doblets_out <- subset(harmonized_seurat_3_doblets, subset = DF.classifications_0.25_0.28_3067 %in% clusters_to_include)
+
+#Find Positive Markers---------
+positive_markers_harmonized_3_doublets_out <- FindAllMarkers(harmonized_seurat_3_doblets_out, only.pos = TRUE)
+positive_markers_harmonized_3_doublets_out %>%
+  group_by(cluster) %>%
+  filter(avg_log2FC > 1) %>%
+  slice_head(n = 5) %>%
+  ungroup() -> top5
+harmonized_seurat_3_doblets_out <- ScaleData(object = harmonized_seurat_3_doblets_out, features = rownames(harmonized_seurat_3_doblets_out))
+DoHeatmap(harmonized_seurat_3_doblets_out, features = top5$gene, size = 3, angle = 45, slot = "scale.data")
+
+#Annotation
+new.cluster.ids <- c("Epithelial cells 1", "Fibroblasts", "Epithelial cells 2", "Lymphocytes", "Myeloid cells", "Epithelial cells 3", "Epithelial cells 4", "Endothelial cells", "Pericytes", "Basal cells", "Mast cells", "Ciliated cells")
+names(new.cluster.ids) <- levels(harmonized_seurat_3_doblets_out)
+harmonized_seurat_3_doblets_out <- RenameIdents(harmonized_seurat_3_doblets_out, new.cluster.ids)
+harmonized_seurat_3_doblets_out@meta.data$Cell_type <- harmonized_seurat_3_doblets_out@active.ident
+
+#DimPlots
+DimPlot(harmonized_seurat_3_doblets_out, reduction = "umap",label=TRUE)
+DimPlot(harmonized_seurat_3_doblets_out, reduction = "umap", split.by = "Sample_type",label=T, label.size = 3)
+DimPlot(harmonized_seurat_3_doblets_out, reduction = "umap", split.by = "Histological_type",label=TRUE)
+DimPlot(harmonized_seurat_3_doblets_out, reduction = "umap", split.by = "Histological_type",label=F)
+DimPlot(harmonized_seurat_3_doblets_out, reduction = "umap", split.by = "Sample_ID",label=F)
+VlnPlot(harmonized_seurat_3_doblets_out, features = c("nFeature_RNA"), split.by="Sample_type", pt.size = 0)
+
+#Props-----------
+populations <- FetchData(harmonized_seurat_3_doblets_out, vars = c("Sample_ID", "Cell_type"))
+population_props <- as.data.frame(prop.table(table(populations$Sample_ID, populations$Cell_type), margin = 1))
+colnames(population_props) <- c("Sample_ID", "CellType", "Proportion")
+bar_plot <- ggplot(population_props, aes(x = Sample_ID, y = Proportion, fill = factor(CellType))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Mixture Plot",
+       x = "Sample ID",
+       y = "Proportion",
+       fill = "Cell Type") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Inclina las etiquetas de las muestras 
+  scale_fill_discrete(name = "CellType") 
+print(bar_plot)
+
+#Dotplot
+dotplot <- DotPlot(harmonized_seurat_3_doblets_out, features = c("EPCAM", "KRT8", "MKI67", "CDH1","FOXJ1", "DNAI1", "ROPN1L", "KRT5", "TRIM29", "COL17A1", "FAP", "CTHRC1", "SPARC", "PDGFRB", "PECAM1", "ENG", "VWF","CD3E", "CD4", "CD8A", "MS4A1", "CD163", "CD68","C1QA", "SLC18A2", "KIT", "CPA3"), split.by="Sample_type", cols="RdBu")+ RotatedAxis()+
+  coord_flip() +
+  theme(legend.position = "bottom")  # Opcional: para mover la leyenda
+dotplot
