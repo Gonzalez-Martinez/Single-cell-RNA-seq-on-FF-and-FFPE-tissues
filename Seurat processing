@@ -1,0 +1,117 @@
+# LOAD PACKAGES -----------------------------------------------------------
+
+library(Seurat)
+library(plyr)
+library(dplyr)
+library(Matrix)
+library(cowplot)
+library(tidyr)
+library(eply)
+library(ggplot2)
+library(harmony)
+library(DoubletFinder)
+
+setwd("~/scRNAseq_SilviaG/COMPARATIVA FRESH FFPE")
+
+# 10X CellRanger .HDF5 format ---------
+filename <- file.path("E:", "single cell raw data", "AnalisisParafinaVsFresco", "comparativa", "outs", "count", "filtered_feature_bc_matrix.h5")
+hdf5_object <- Read10X_h5(filename = filename,use.names = TRUE,unique.features = TRUE)
+
+comparative_fresh_ffpe <- CreateSeuratObject(counts = hdf5_object)
+
+## QC and Filtering ----------
+comparative_fresh_ffpe$mitoPercent <- PercentageFeatureSet(comparative_fresh_ffpe, pattern = '^MT-')
+VlnPlot(comparative_fresh_ffpe, features = c("nFeature_RNA", "nCount_RNA", "mitoPercent"), ncol = 3)
+comparative_fresh_ffpe_filtered <- subset(comparative_fresh_ffpe, subset = nFeature_RNA > 200 & nFeature_RNA < 10000 & nCount_RNA > 250 & nCount_RNA < 50000 & mitoPercent < 20)
+
+# pre-process standard workflow ---------------
+comparative_fresh_ffpe_filtered <- NormalizeData(object = comparative_fresh_ffpe_filtered)
+comparative_fresh_ffpe_filtered <- FindVariableFeatures(object = comparative_fresh_ffpe_filtered)
+comparative_fresh_ffpe_filtered <- ScaleData(object = comparative_fresh_ffpe_filtered)
+comparative_fresh_ffpe_filtered <- RunPCA(object = comparative_fresh_ffpe_filtered)
+ElbowPlot(comparative_fresh_ffpe_filtered)
+comparative_fresh_ffpe_filtered <- FindNeighbors(object = comparative_fresh_ffpe_filtered, dims = 1:15)
+comparative_fresh_ffpe_filtered <- FindClusters(object = comparative_fresh_ffpe_filtered, resolution =0.1)
+comparative_fresh_ffpe_filtered <- RunUMAP(object = comparative_fresh_ffpe_filtered, dims = 1:15)
+
+#Harmony------------
+harmonized_seurat_3 <- RunHarmony(comparative_fresh_ffpe_filtered, 
+                                  group.by.vars = c("Sample_type"), 
+                                  reduction = "pca", assay.use = "SCT", reduction.save = "harmony")
+harmonized_seurat_3 <- RunUMAP(harmonized_seurat_3, reduction = "harmony", assay = "SCT", dims = 1:15)
+harmonized_seurat_3 <- FindNeighbors(object = harmonized_seurat_3, reduction = "harmony")
+harmonized_seurat_3 <- FindClusters(harmonized_seurat_3, resolution = c(0.15))
+
+positive_markers_harmonized_3 <- FindAllMarkers(harmonized_seurat_3, only.pos = TRUE)
+
+positive_markers_harmonized_3 %>%
+  group_by(cluster) %>%
+  filter(avg_log2FC > 1) %>%
+  slice_head(n = 5) %>%
+  ungroup() -> top5
+
+harmonized_seurat_3 <- ScaleData(object = harmonized_seurat_3, features = rownames(harmonized_seurat_3))
+DoHeatmap(harmonized_seurat_3, features = top5$gene, size = 3, angle = 45, slot = "scale.data")
+
+new.cluster.ids <- c("Epithelial cells 1", "Fibroblasts", "Epithelial cells 2", "Lymphocytes", "Myeloid cells", "Epithelial cells 3", "Epithelial cells 4", "Endothelial cells", "Pericytes", "Basal cells", "Mast cells", "Ciliated cells")
+
+names(new.cluster.ids) <- levels(harmonized_seurat_3)
+harmonized_seurat_3 <- RenameIdents(harmonized_seurat_3, new.cluster.ids)
+harmonized_seurat_3@meta.data$Cell_type <- harmonized_seurat_3@active.ident
+
+#Doublets detection----------------
+## pK Identification 
+sweep.res.list <- paramSweep(harmonized_seurat_3, PCs = 1:20, sct = FALSE)
+sweep.stats <- summarizeSweep(sweep.res.list, GT = FALSE)
+bcmvn <- find.pK(sweep.stats)
+
+ggplot(bcmvn, aes(pK, BCmetric, group = 1)) +
+  geom_point() +
+  geom_line()
+
+pK <- bcmvn %>% 
+  filter(BCmetric == max(BCmetric)) %>%
+  select(pK) 
+pK <- as.numeric(as.character(pK[[1]]))
+
+## Homotypic Doublet Proportion Estimate
+annotations <- harmonized_seurat_3@meta.data$seurat_clusters
+homotypic.prop <- modelHomotypic(annotations)
+nExp_poi <- round(0.076*nrow(harmonized_seurat_3@meta.data))
+nExp_poi.adj <- round(nExp_poi*(1-homotypic.prop))
+
+# run doubletFinder 
+harmonized_seurat_3_doblets <- doubletFinder(harmonized_seurat_3, 
+                                     PCs = 1:20, 
+                                     pN = 0.25, 
+                                     pK = pK, 
+                                     nExp = nExp_poi.adj,
+                                     reuse.pANN = FALSE, sct = FALSE)
+
+# visualize doublets
+DimPlot(harmonized_seurat_3_doblets, reduction = 'umap', group.by = "DF.classifications_0.25_0.28_3067")
+
+# number of singlets and doublets
+table(harmonized_seurat_3_doblets@meta.data$DF.classifications_0.25_0.28_3067)
+harmonized_seurat_3_doblets <- SetIdent(harmonized_seurat_3_doblets, value = "DF.classifications_0.25_0.28_3067")
+
+## Proportions
+new.cluster.ids <- c("Doublets", "Singlets")
+
+populations <- FetchData(harmonized_seurat_3_doblets, vars = c("Sample_type", "DF.classifications_0.25_0.28_3067"))
+population_props <- as.data.frame(prop.table(table(populations$Sample_type, populations$DF.classifications_0.25_0.28_3067), margin = 1))
+colnames(population_props) <- c("SampleType", "Doublets_Singlets", "Proportion")
+bar_plot <- ggplot(population_props, aes(x = SampleType, y = Proportion, fill = factor(Doublets_Singlets))) +
+  geom_bar(stat = "identity") +
+  labs(title = "Bar Mixture Plot",
+       x = "Sample Type",
+       y = "Proportion",
+       fill = "Doublets Singlets") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +  # Inclina las etiquetas de las muestras 
+  scale_fill_discrete(name = "Doublets_Singlets", labels = new.cluster.ids) 
+print(bar_plot)
+
+#To eliminate doublets-----------
+clusters_to_include <- c("Singlet")
+harmonized_seurat_3_doblets_out <- subset(harmonized_seurat_3_doblets, subset = DF.classifications_0.25_0.28_3067 %in% clusters_to_include)
