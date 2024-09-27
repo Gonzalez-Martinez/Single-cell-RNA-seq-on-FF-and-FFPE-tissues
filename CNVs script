@@ -1,0 +1,42 @@
+#InferCNVs ILC epithelial cells------
+
+library(infercnv)
+
+gene_order_file = "C:/Users/Documents/scRNAseq_SilviaG/order"
+out_dir_name <- "C:/Users/Documents/scRNAseq_SilviaG/InferCNVs_Epi_vs_basal_plus_lymph"
+clusters_to_include <- c("Epithelial cells 2", "Basal cells", "Lymphocytes")
+Object_to_CNVs <- subset(harmonized_seurat_3_doblets_out, subset = Cell_type %in% clusters_to_include)
+DefaultAssay(Object_to_CNVs) = 'RNA'
+counts_matrix <- GetAssayData(Object_to_CNVs, layer = "counts")
+sample_annotation = Object_to_CNVs@meta.data[,"Cell_type", drop=FALSE] 
+infercnv_obj = CreateInfercnvObject(raw_counts_matrix=counts_matrix,
+                                    annotations_file=sample_annotation,
+                                    delim="\t",
+                                    gene_order_file=gene_order_file,
+                                    ref_group_names=c("Basal cells","Lymphocytes"))
+infercnv_obj = infercnv::run(infercnv_obj
+                             ,cutoff=0.1 
+                             ,out_dir=out_dir_name
+                             ,denoise=TRUE
+                             ,HMM=TRUE)
+
+#InferCNVs IDC epithelial cells------
+clusters_to_include <- c("Epithelial cells 1", "Epithelial cells 3", "Epithelial cells 4", "Ciliated cells", "Basal cells", "Lymphocytes")
+Object_to_CNVs <- subset(harmonized_seurat_3_doblets_out, subset = Cell_type %in% clusters_to_include)
+DefaultAssay(Object_to_CNVs) = 'RNA'
+counts_matrix <- GetAssayData(Object_to_CNVs, layer = "counts")
+sample_annotation = Object_to_CNVs@meta.data[,"Cell_type", drop=FALSE] 
+infercnv_obj = CreateInfercnvObject(raw_counts_matrix=counts_matrix,
+                                    annotations_file=sample_annotation,
+                                    delim="\t",
+                                    gene_order_file=gene_order_file,
+                                    ref_group_names=c("Basal cells","Lymphocytes"))
+infercnv_obj = infercnv::run(infercnv_obj
+                             ,cutoff=0.1 
+                             ,out_dir=out_dir_name
+                             ,denoise=TRUE
+                             ,HMM=TRUE)
+
+
+
+
