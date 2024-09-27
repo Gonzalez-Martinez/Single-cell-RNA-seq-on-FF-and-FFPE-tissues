@@ -101,28 +101,3 @@ enrich_result <- enrichGO(gene         = gene_names,
                           readable     = TRUE)
 heatplot(enrich_result, showCategory = 40)
 barplot(enrich_result, showCategory = 30)
-
-#ILC epithelial cells subanalysis-------
-ILC_1 <- NormalizeData(object = ILC_1)
-ILC_1 <- FindVariableFeatures(object = ILC_1)
-ILC_1 <- ScaleData(object = ILC_1)
-ILC_1 <- RunPCA(object = ILC_1)
-ElbowPlot(ILC_1)
-ILC_1 <- FindNeighbors(object = ILC_1, dims = 1:15)
-ILC_1 <- FindClusters(object = ILC_1, resolution =0.3)
-ILC_1 <- RunUMAP(object = ILC_1, dims = 1:15)
-
-#Annotation
-new.cluster.ids <- c("Fibroblasts", "T cells", "Epithelial cells 1", "Myeloid cells", "Epithelial cells 2", "Basal cells", "Normal epithelial cells", "Endothelial cells", "B cells", "Pericytes", "Cycling epithelial cells", "Plasma cells", "Mast cells")
-names(new.cluster.ids) <- levels(ILC_1)
-ILC_1 <- RenameIdents(ILC_1, new.cluster.ids)
-ILC_1@meta.data$Cell_type <- ILC_1@active.ident
-ILC_1 <- SetIdent(ILC_1, value="Cell_type")
-markers_ILC_1 <- FindAllMarkers(ILC_1, only.pos = TRUE)
-markers_ILC_1 %>%
-  group_by(cluster) %>%
-  filter(avg_log2FC > 1) %>%
-  slice_head(n = 5) %>%
-  ungroup() -> top5
-ILC_1 <- ScaleData(object = ILC_1, features = rownames(ILC_1))
-DoHeatmap(ILC_1, features = top5$gene, size = 3, angle = 45, slot = "scale.data")
