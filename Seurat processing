@@ -105,7 +105,6 @@ positive_markers_harmonized_3_doublets_out %>%
   filter(avg_log2FC > 1) %>%
   slice_head(n = 5) %>%
   ungroup() -> top5
-harmonized_seurat_3_doblets_out <- ScaleData(object = harmonized_seurat_3_doblets_out, features = rownames(harmonized_seurat_3_doblets_out))
 DoHeatmap(harmonized_seurat_3_doblets_out, features = top5$gene, size = 3, angle = 45, slot = "scale.data")
 FeaturePlot(harmonized_seurat_3_doblets_out, features = c("EPCAM", "KRT8", "MKI67", "CDH1", "KRT5", "TRIM29", "COL17A1", "FAP", "CTHRC1", "SPARC", "PDGFRB", "PECAM1", "ENG", "VWF","CD3E", "CD4", "CD8A", "MS4A1", "CD163", "CD68","C1QA", "SLC18A2", "KIT"), pt.size=0)
 
