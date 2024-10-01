@@ -40,9 +40,9 @@ Markers_epi_harmony_singlets_by_histological_type <- FindAllMarkers(Harmony_epi_
 Markers_epi_harmony_singlets_by_histological_type %>%
   group_by(cluster) %>%
   filter(avg_log2FC > 1) %>%
-  slice_head(n = 40) %>%
-  ungroup() -> top40
-DoHeatmap(Harmony_epi_singlet, features = top40$gene, size = 3, angle = 45, slot = "scale.data")
+  slice_head(n = 20) %>%
+  ungroup() -> top20
+DoHeatmap(Harmony_epi_singlet, features = top20$gene, size = 3, angle = 45, slot = "scale.data")
 
 #DotPlot epi------
 DotPlot(Harmony_epi_singlet, features = c("ERBB2", "MKI67", "PGR", "ESR1", "CDH1"), group.by = "Sample_ID") + 
