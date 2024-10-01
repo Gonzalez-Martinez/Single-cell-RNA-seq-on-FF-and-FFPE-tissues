@@ -32,8 +32,6 @@ Markers_epi_harmony_singlets_Cell_type %>%
   filter(avg_log2FC > 1) %>%
   slice_head(n = 10) %>%
   ungroup() -> top10
-
-Harmony_epi_singlet <- ScaleData(object = Harmony_epi_singlet, features = rownames(Harmony_epi_singlet))
 DoHeatmap(Harmony_epi_singlet, features = top10$gene, size = 3, angle = 45, slot = "scale.data")
 
 #HEATMAP ILC vs IDC------------
